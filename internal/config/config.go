@@ -20,6 +20,7 @@ type Config struct {
 	ModelContextTokens      int
 	EnableProviderWebsearch bool
 	DropSamplingParams      bool
+	DebugPrompts            bool
 }
 
 // Load returns configuration with env values and sane defaults.
@@ -35,6 +36,7 @@ func Load() (*Config, error) {
 		SystemPrompt:            getenvDefault("SYSTEM_PROMPT", "You are a concise, helpful CLI assistant."),
 		EnableProviderWebsearch: getBool("ENABLE_PROVIDER_WEBSEARCH", false),
 		DropSamplingParams:      getBool("DROP_SAMPLING_PARAMS", false),
+		DebugPrompts:            getBool("DEBUG_PROMPTS", false),
 	}
 
 	cfg.Temperature = getFloat("TEMPERATURE", 0.2)

@@ -1,15 +1,15 @@
 package cli
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
+	"github.com/peterh/liner"
 	"github.com/spf13/cobra"
 	"github.com/yourname/clichat/internal/chat"
 	"github.com/yourname/clichat/internal/config"
+	ctxutil "github.com/yourname/clichat/internal/context"
 	"github.com/yourname/clichat/internal/memory/sqlite"
 	"github.com/yourname/clichat/internal/provider/litellm"
 	"github.com/yourname/clichat/internal/stream"
@@ -37,35 +37,80 @@ var chatCmd = &cobra.Command{
 		svc := chat.NewService(cfg, store, prov, r)
 
 		fmt.Println("Enter messages (Ctrl+C to quit). Conversation: default")
-		scanner := bufio.NewScanner(os.Stdin)
-		for {
-			fmt.Print("you> ")
-			if !scanner.Scan() {
-				break
+
+		ln := liner.NewLiner()
+		defer ln.Close()
+		ln.SetCtrlCAborts(true)
+
+		ln.SetCompleter(func(line string) (c []string) {
+			trim := strings.TrimSpace(line)
+			if strings.HasPrefix(trim, "/model ") {
+				partial := strings.TrimSpace(strings.TrimPrefix(trim, "/model "))
+				mods, err := prov.ListModels(context.Background())
+				if err != nil {
+					return nil
+				}
+				for _, m := range mods {
+					name := m.Name
+					if name == "" {
+						name = m.ID
+					}
+					if partial == "" || strings.HasPrefix(strings.ToLower(name), strings.ToLower(partial)) {
+						c = append(c, "/model "+name)
+					}
+				}
+				return c
 			}
-			line := strings.TrimSpace(scanner.Text())
+			if strings.HasPrefix(trim, "/mo") {
+				return []string{"/models", "/model "}
+			}
+			if strings.HasPrefix(trim, "/h") {
+				return []string{"/history"}
+			}
+			if strings.HasPrefix(trim, "/c") {
+				return []string{"/clear", "/contextwindow"}
+			}
+			if strings.HasPrefix(trim, "/con") {
+				return []string{"/contextwindow"}
+			}
+			return nil
+		})
+
+		for {
+			line, err := ln.Prompt("you> ")
+			if err != nil {
+				if err == liner.ErrPromptAborted {
+					fmt.Println()
+					break
+				}
+				return err
+			}
+			line = strings.TrimSpace(line)
 			if line == "" {
 				continue
 			}
+			ln.AppendHistory(line)
+
 			if strings.HasPrefix(line, "/") {
-				if handled, err := handleSlashCommand(context.Background(), prov, line); err != nil {
+				if handled, err := handleSlashCommand(context.Background(), prov, cfg, line); err != nil {
 					fmt.Println("error:", err)
 					continue
 				} else if handled {
 					continue
 				}
 			}
+
 			fmt.Print("assistant> ")
 			if err := svc.HandleUserInput(context.Background(), "default", line); err != nil {
 				fmt.Println("\nerror:", err)
 			}
 			fmt.Println()
 		}
-		return scanner.Err()
+		return nil
 	},
 }
 
-func handleSlashCommand(ctx context.Context, prov *litellm.Client, line string) (bool, error) {
+func handleSlashCommand(ctx context.Context, prov *litellm.Client, cfg *config.Config, line string) (bool, error) {
 	parts := strings.Fields(line)
 	if len(parts) == 0 {
 		return false, nil
@@ -104,8 +149,83 @@ func handleSlashCommand(ctx context.Context, prov *litellm.Client, line string) 
 		}
 		fmt.Println("default model set to:", name)
 		return true, nil
+	case "/history":
+		store, err := sqlite.Open(cfg.DBPath)
+		if err != nil {
+			return true, err
+		}
+		defer store.Close()
+		msgs, err := store.ListMessages("default", 200)
+		if err != nil {
+			return true, err
+		}
+		for _, m := range msgs {
+			fmt.Printf("%s: %.100s\n", m.Role, m.Content)
+		}
+		return true, nil
+	case "/clear":
+		store, err := sqlite.Open(cfg.DBPath)
+		if err != nil {
+			return true, err
+		}
+		defer store.Close()
+		if err := store.ClearConversation("default"); err != nil {
+			return true, err
+		}
+		fmt.Println("history cleared for conversation: default")
+		return true, nil
+	case "/contextwindow":
+		store, err := sqlite.Open(cfg.DBPath)
+		if err != nil {
+			return true, err
+		}
+		defer store.Close()
+		conv, err := store.CreateOrGetConversation("default", "default")
+		if err != nil {
+			return true, err
+		}
+		used := conv.ContextPromptTokens + conv.ContextAnswerTokens
+		if used == 0 {
+			msgs, err := store.ListMessages("default", 200)
+			if err == nil {
+				answerTokens := 0
+				promptTokens := 0
+				promptCount := 0
+				answerCount := 0
+				if len(msgs) > 0 {
+					// last assistant index
+					idx := -1
+					for i := len(msgs) - 1; i >= 0; i-- {
+						if msgs[i].Role == "assistant" {
+							idx = i
+							break
+						}
+					}
+					for i, m := range msgs {
+						if m.Role == "assistant" {
+							answerCount++
+							if i == idx {
+								answerTokens += ctxutil.EstimateTokens(m.Content)
+							}
+							continue
+						}
+						// user/system as prompt
+						promptCount++
+						promptTokens += ctxutil.EstimateTokens(m.Content)
+					}
+				}
+				_ = store.UpdateContextStats("default", promptTokens, answerTokens, promptCount, answerCount)
+				conv, _ = store.CreateOrGetConversation("default", "default")
+				used = conv.ContextPromptTokens + conv.ContextAnswerTokens
+			}
+		}
+		if cfg.ModelContextTokens > 0 {
+			fmt.Printf("context: prompts=%d, answers=%d, tokens %d/%d (%s)\n", conv.PromptMessageCount, conv.AnswerMessageCount, used, cfg.ModelContextTokens, ctxutil.PercentUsed(used, cfg.ModelContextTokens))
+		} else {
+			fmt.Printf("context: prompts=%d, answers=%d, tokens %d (N/A)\n", conv.PromptMessageCount, conv.AnswerMessageCount, used)
+		}
+		return true, nil
 	default:
-		// Unknown slash command; not handled.
 		return false, nil
 	}
 }

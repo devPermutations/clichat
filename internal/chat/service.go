@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/yourname/clichat/internal/config"
+	ctxutil "github.com/yourname/clichat/internal/context"
 	"github.com/yourname/clichat/internal/memory/sqlite"
 	"github.com/yourname/clichat/internal/provider/litellm"
 	"github.com/yourname/clichat/internal/stream"
@@ -30,9 +31,11 @@ func (s *Service) HandleUserInput(ctx context.Context, conversationID string, te
 	if _, err := s.store.CreateOrGetConversation(conversationID, conversationID); err != nil {
 		return err
 	}
+	// Persist only the current user message now
 	if _, err := s.store.AppendMessage(conversationID, "user", text); err != nil {
 		return err
 	}
+	// Load up to 200 recent messages for context
 	messages, err := s.store.ListMessages(conversationID, 200)
 	if err != nil {
 		return err
@@ -66,6 +69,14 @@ func (s *Service) HandleUserInput(ctx context.Context, conversationID string, te
 		req.Temperature = s.cfg.Temperature
 		req.TopP = s.cfg.TopP
 	}
+	if s.cfg.DebugPrompts {
+		fmt.Println("\n[debug] prompt context:")
+		for i, m := range req.Messages {
+			fmt.Printf("  %02d %s: %.60s\n", i, m.Role, m.Content)
+		}
+	}
+
+	promptTokens := estimatePromptTokens(reqMsgs)
 	deltas, errs := s.prov.StreamChat(ctx, req)
 	var assistant string
 	for {
@@ -74,9 +85,13 @@ func (s *Service) HandleUserInput(ctx context.Context, conversationID string, te
 			if !ok {
 				if assistant != "" {
 					_, _ = s.store.AppendMessage(conversationID, "assistant", assistant)
-					// context usage suffix (placeholder as provider usage not parsed yet)
+					// naive completion token estimate
+					answerTokens := ctxutil.EstimateTokens(assistant)
+					_ = s.store.UpdateContextUsage(conversationID, promptTokens, answerTokens)
+					// context usage suffix if configured
 					if s.cfg.ModelContextTokens > 0 {
-						fmt.Printf("  [context: N/A/%d]\n", s.cfg.ModelContextTokens)
+						used := promptTokens + answerTokens
+						fmt.Printf("  [context: %d/%d (%s)]\n", used, s.cfg.ModelContextTokens, ctxutil.PercentUsed(used, s.cfg.ModelContextTokens))
 					} else {
 						fmt.Println()
 					}
@@ -91,4 +106,12 @@ func (s *Service) HandleUserInput(ctx context.Context, conversationID string, te
 			return ctx.Err()
 		}
 	}
+}
+
+func estimatePromptTokens(msgs []litellm.ChatMessage) int {
+	contents := make([]string, 0, len(msgs))
+	for _, m := range msgs {
+		contents = append(contents, m.Content)
+	}
+	return ctxutil.EstimateTokensForContents(contents)
 }
