@@ -77,6 +77,7 @@ var chatCmd = &cobra.Command{
 		})
 
 		for {
+			// Plain user prompt (avoid ANSI here to prevent liner errors on Windows)
 			line, err := ln.Prompt("you> ")
 			if err != nil {
 				if err == liner.ErrPromptAborted {
@@ -100,7 +101,8 @@ var chatCmd = &cobra.Command{
 				}
 			}
 
-			fmt.Print("assistant> ")
+			// Blue tag for the model name; streaming stays blue; service resets color at end
+			fmt.Printf("\x1b[34m%s> ", currentModelPrompt(cfg))
 			if err := svc.HandleUserInput(context.Background(), "default", line); err != nil {
 				fmt.Println("\nerror:", err)
 			}
@@ -108,6 +110,17 @@ var chatCmd = &cobra.Command{
 		}
 		return nil
 	},
+}
+
+func currentModelPrompt(cfg *config.Config) string {
+	name := cfg.Model
+	if st, err := config.LoadState(); err == nil && st.Model != "" {
+		name = st.Model
+	}
+	if name == "" {
+		name = "assistant"
+	}
+	return name
 }
 
 func handleSlashCommand(ctx context.Context, prov *litellm.Client, cfg *config.Config, line string) (bool, error) {

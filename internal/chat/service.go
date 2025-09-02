@@ -25,6 +25,9 @@ func NewService(cfg *config.Config, store *sqlite.Store, prov *litellm.Client, r
 }
 
 func (s *Service) HandleUserInput(ctx context.Context, conversationID string, text string) error {
+	// Always reset color on exit so user prompt returns to default/white
+	defer fmt.Print("\x1b[0m")
+
 	if conversationID == "" {
 		return errors.New("conversation id required")
 	}
