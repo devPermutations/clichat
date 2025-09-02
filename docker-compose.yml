@@ -1,0 +1,15 @@
+services:
+  clichat:
+    build:
+      context: .
+    image: clichat:local
+    working_dir: /app
+    env_file:
+      - .env
+    volumes:
+      - ./:/app
+    stdin_open: true  # keep STDIN open for interactive chat
+    tty: true         # allocate a TTY
+    command: ["chat"]
+
+
