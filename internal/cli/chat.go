@@ -277,9 +277,19 @@ func handleSlashCommand(ctx context.Context, prov *litellm.Client, cfg *config.C
 		defer cancel()
 		var c *exec.Cmd
 		if runtime.GOOS == "windows" {
+			// Prefer WSL on Windows; provide a clearer message if unavailable
+			if _, err := exec.LookPath("wsl"); err != nil {
+				fmt.Println("bash error: WSL is not installed or not in PATH; install WSL or run commands outside Windows")
+				return true, nil
+			}
 			c = exec.CommandContext(execCtx, "wsl", "bash", "-lc", cmdStr)
 		} else {
-			c = exec.CommandContext(execCtx, "bash", "-lc", cmdStr)
+			// Use bash when available; fall back to sh (e.g., Alpine)
+			shell := "bash"
+			if _, err := exec.LookPath("bash"); err != nil {
+				shell = "sh"
+			}
+			c = exec.CommandContext(execCtx, shell, "-lc", cmdStr)
 		}
 		c.Stdout = os.Stdout
 		c.Stderr = os.Stderr
