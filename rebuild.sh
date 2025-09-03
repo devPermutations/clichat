@@ -17,3 +17,4 @@ docker compose build --pull
 echo "[rebuild] Done. You can now run: docker compose run --rm clichat chat"
 
 
+
