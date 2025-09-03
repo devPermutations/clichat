@@ -133,11 +133,11 @@ func (s *Service) HandleUserInput(ctx context.Context, conversationID string, te
 			assistant += d
 			_ = s.r.WriteToken(d)
 		case err := <-errs:
-			_ = s.r.WriteToken("\n")
-			_ = s.r.WriteToken("[error: stream interrupted]\n")
-			_ = s.r.WriteToken("")
-			saveAssistant()
-			return err
+			if err != nil {
+				saveAssistant()
+				return err
+			}
+			// nil error: ignore and continue
 		case <-ctx.Done():
 			saveAssistant()
 			return ctx.Err()
