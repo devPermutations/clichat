@@ -44,36 +44,43 @@ var chatCmd = &cobra.Command{
 
 		ln.SetCompleter(func(line string) (c []string) {
 			trim := strings.TrimSpace(line)
-			if strings.HasPrefix(trim, "/model ") {
-				partial := strings.TrimSpace(strings.TrimPrefix(trim, "/model "))
-				mods, err := prov.ListModels(context.Background())
-				if err != nil {
-					return nil
-				}
-				for _, m := range mods {
-					name := m.Name
-					if name == "" {
-						name = m.ID
-					}
-					if partial == "" || strings.HasPrefix(strings.ToLower(name), strings.ToLower(partial)) {
-						c = append(c, "/model "+name)
+			lower := strings.ToLower(trim)
+
+			// Base command suggestions when user starts typing '/'
+			allCmds := []string{"/models", "/model ", "/history", "/clear", "/contextwindow"}
+			if strings.HasPrefix(lower, "/") && !strings.HasPrefix(lower, "/model") {
+				for _, cmd := range allCmds {
+					if strings.HasPrefix(cmd, lower) || lower == "/" {
+						c = append(c, cmd)
 					}
 				}
-				return c
 			}
-			if strings.HasPrefix(trim, "/mo") {
-				return []string{"/models", "/model "}
+
+			// Model completion: support '/model' (no space) and '/model <partial>'
+			if strings.HasPrefix(lower, "/model") {
+				if lower == "/model" {
+					return []string{"/model "}
+				}
+				if strings.HasPrefix(lower, "/model ") {
+					partial := strings.TrimSpace(strings.TrimPrefix(trim, "/model "))
+					mods, err := prov.ListModels(context.Background())
+					if err != nil {
+						return []string{"/models"}
+					}
+					for _, m := range mods {
+						name := m.Name
+						if name == "" {
+							name = m.ID
+						}
+						if partial == "" || strings.HasPrefix(strings.ToLower(name), strings.ToLower(partial)) {
+							c = append(c, "/model "+name)
+						}
+					}
+					return c
+				}
 			}
-			if strings.HasPrefix(trim, "/h") {
-				return []string{"/history"}
-			}
-			if strings.HasPrefix(trim, "/c") {
-				return []string{"/clear", "/contextwindow"}
-			}
-			if strings.HasPrefix(trim, "/con") {
-				return []string{"/contextwindow"}
-			}
-			return nil
+
+			return c
 		})
 
 		for {

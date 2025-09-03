@@ -90,11 +90,7 @@ func (s *Service) HandleUserInput(ctx context.Context, conversationID string, te
 		Stream:   true,
 		Tools:    tools,
 	}
-	// Some models (e.g., GPT-5 family and search-preview variants) reject sampling params.
-	omitSampling := s.cfg.DropSamplingParams ||
-		strings.HasPrefix(strings.ToLower(model), "gpt-5") ||
-		strings.Contains(strings.ToLower(model), "search")
-	if !omitSampling {
+	if !(s.cfg.DropSamplingParams || strings.HasPrefix(model, "gpt-5")) {
 		req.Temperature = s.cfg.Temperature
 		req.TopP = s.cfg.TopP
 	}
