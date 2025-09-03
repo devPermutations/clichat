@@ -47,8 +47,30 @@ func (s *Service) HandleUserInput(ctx context.Context, conversationID string, te
 	if s.cfg.SystemPrompt != "" {
 		reqMsgs = append(reqMsgs, litellm.ChatMessage{Role: "system", Content: s.cfg.SystemPrompt})
 	}
-	for _, m := range messages {
-		reqMsgs = append(reqMsgs, litellm.ChatMessage{Role: m.Role, Content: m.Content})
+	// Prefer relevant tail of history. If we have any assistant replies, include from the last assistant onward.
+	// If we only have user messages (e.g., due to prior bug or interruptions), include only the last 1-2 user messages
+	// to avoid the model re-answering the entire backlog repeatedly.
+	lastAssistant := -1
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == "assistant" {
+			lastAssistant = i
+			break
+		}
+	}
+	if lastAssistant >= 0 {
+		for _, m := range messages[lastAssistant:] {
+			reqMsgs = append(reqMsgs, litellm.ChatMessage{Role: m.Role, Content: m.Content})
+		}
+	} else {
+		start := len(messages) - 2
+		if start < 0 {
+			start = 0
+		}
+		for _, m := range messages[start:] {
+			if m.Role == "user" {
+				reqMsgs = append(reqMsgs, litellm.ChatMessage{Role: m.Role, Content: m.Content})
+			}
+		}
 	}
 	// resolve model: state overrides env if present
 	model := s.cfg.Model
@@ -82,16 +104,23 @@ func (s *Service) HandleUserInput(ctx context.Context, conversationID string, te
 	promptTokens := estimatePromptTokens(reqMsgs)
 	deltas, errs := s.prov.StreamChat(ctx, req)
 	var assistant string
+	saved := false
+	saveAssistant := func() int {
+		if saved || assistant == "" {
+			return 0
+		}
+		_, _ = s.store.AppendMessage(conversationID, "assistant", assistant)
+		tokens := ctxutil.EstimateTokens(assistant)
+		_ = s.store.UpdateContextUsage(conversationID, promptTokens, tokens)
+		saved = true
+		return tokens
+	}
 	for {
 		select {
 		case d, ok := <-deltas:
 			if !ok {
+				answerTokens := saveAssistant()
 				if assistant != "" {
-					_, _ = s.store.AppendMessage(conversationID, "assistant", assistant)
-					// naive completion token estimate
-					answerTokens := ctxutil.EstimateTokens(assistant)
-					_ = s.store.UpdateContextUsage(conversationID, promptTokens, answerTokens)
-					// context usage suffix if configured
 					if s.cfg.ModelContextTokens > 0 {
 						used := promptTokens + answerTokens
 						fmt.Printf("  [context: %d/%d (%s)]\n", used, s.cfg.ModelContextTokens, ctxutil.PercentUsed(used, s.cfg.ModelContextTokens))
@@ -104,8 +133,13 @@ func (s *Service) HandleUserInput(ctx context.Context, conversationID string, te
 			assistant += d
 			_ = s.r.WriteToken(d)
 		case err := <-errs:
+			_ = s.r.WriteToken("\n")
+			_ = s.r.WriteToken("[error: stream interrupted]\n")
+			_ = s.r.WriteToken("")
+			saveAssistant()
 			return err
 		case <-ctx.Done():
+			saveAssistant()
 			return ctx.Err()
 		}
 	}

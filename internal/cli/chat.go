@@ -173,7 +173,14 @@ func handleSlashCommand(ctx context.Context, prov *litellm.Client, cfg *config.C
 			return true, err
 		}
 		for _, m := range msgs {
-			fmt.Printf("%s: %.100s\n", m.Role, m.Content)
+			role := m.Role
+			switch role {
+			case "user":
+				role = "you"
+			case "assistant":
+				role = currentModelPrompt(cfg)
+			}
+			fmt.Printf("%s> %s\n", role, strings.TrimSpace(m.Content))
 		}
 		return true, nil
 	case "/clear":
