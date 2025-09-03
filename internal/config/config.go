@@ -21,6 +21,7 @@ type Config struct {
 	EnableProviderWebsearch bool
 	DropSamplingParams      bool
 	DebugPrompts            bool
+	AllowLocalShell         bool
 }
 
 // Load returns configuration with env values and sane defaults.
@@ -37,6 +38,7 @@ func Load() (*Config, error) {
 		EnableProviderWebsearch: getBool("ENABLE_PROVIDER_WEBSEARCH", false),
 		DropSamplingParams:      getBool("DROP_SAMPLING_PARAMS", false),
 		DebugPrompts:            getBool("DEBUG_PROMPTS", false),
+		AllowLocalShell:         getBool("ALLOW_LOCAL_SHELL", false),
 	}
 
 	cfg.Temperature = getFloat("TEMPERATURE", 0.2)

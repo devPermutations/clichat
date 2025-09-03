@@ -3,7 +3,11 @@ package cli
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
+	"runtime"
 	"strings"
+	"time"
 
 	"github.com/peterh/liner"
 	"github.com/spf13/cobra"
@@ -48,6 +52,9 @@ var chatCmd = &cobra.Command{
 
 			// Base command suggestions when user starts typing '/'
 			allCmds := []string{"/models", "/model ", "/history", "/clear", "/contextwindow"}
+			if cfg.AllowLocalShell {
+				allCmds = append(allCmds, "/bash ")
+			}
 			if strings.HasPrefix(lower, "/") && !strings.HasPrefix(lower, "/model") {
 				for _, cmd := range allCmds {
 					if strings.HasPrefix(cmd, lower) || lower == "/" {
@@ -250,6 +257,38 @@ func handleSlashCommand(ctx context.Context, prov *litellm.Client, cfg *config.C
 			fmt.Printf("context: prompts=%d, answers=%d, tokens %d/%d (%s)\n", conv.PromptMessageCount, conv.AnswerMessageCount, used, cfg.ModelContextTokens, ctxutil.PercentUsed(used, cfg.ModelContextTokens))
 		} else {
 			fmt.Printf("context: prompts=%d, answers=%d, tokens %d (N/A)\n", conv.PromptMessageCount, conv.AnswerMessageCount, used)
+		}
+		return true, nil
+	case "/bash":
+		if !cfg.AllowLocalShell {
+			fmt.Println("local shell is disabled (set ALLOW_LOCAL_SHELL=true)")
+			return true, nil
+		}
+		if len(parts) < 2 {
+			fmt.Println("usage: /bash <command>")
+			return true, nil
+		}
+		cmdStr := strings.TrimSpace(strings.TrimPrefix(line, "/bash "))
+		if cmdStr == "" {
+			fmt.Println("usage: /bash <command>")
+			return true, nil
+		}
+		execCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+		defer cancel()
+		var c *exec.Cmd
+		if runtime.GOOS == "windows" {
+			c = exec.CommandContext(execCtx, "wsl", "bash", "-lc", cmdStr)
+		} else {
+			c = exec.CommandContext(execCtx, "bash", "-lc", cmdStr)
+		}
+		c.Stdout = os.Stdout
+		c.Stderr = os.Stderr
+		if err := c.Run(); err != nil {
+			if execCtx.Err() == context.DeadlineExceeded {
+				fmt.Println("bash error: command timed out")
+			} else {
+				fmt.Println("bash error:", err)
+			}
 		}
 		return true, nil
 	default:

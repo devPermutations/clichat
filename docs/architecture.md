@@ -39,6 +39,7 @@
 - `SYSTEM_PROMPT`
 - `MODEL_CONTEXT_TOKENS` (optional override for context % computation)
 - `ENABLE_PROVIDER_WEBSEARCH=true|false`
+ - `ALLOW_LOCAL_SHELL=true|false`
  - `DROP_SAMPLING_PARAMS`
  - `DEBUG_PROMPTS`
 
