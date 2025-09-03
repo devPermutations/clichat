@@ -5,9 +5,12 @@ Quick start
 - Create a .env with your LiteLLM settings
 - Run: ./clichat chat
 
-Bash completion
-- Generate: ./clichat completion bash > ~/.config/clichat/completion.bash
-- Source it: source ~/.config/clichat/completion.bash
+In-session commands (within `chat`)
+- /models — list models
+- /model <name> — set default model (persists in state.json)
+- /history — print recent messages
+- /clear — clear messages and reset context stats
+- /contextwindow — show prompt/answer counts and token usage
 
 Model management
 - List models: ./clichat models

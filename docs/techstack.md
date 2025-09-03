@@ -4,9 +4,8 @@
 - **Go**: >= 1.22
 
 ## CLI Framework
-- **spf13/cobra** for commands and shell completion (bash/zsh/fish/powershell).
+- **spf13/cobra** for commands. Shell completion not implemented yet.
 - In-session line editing + tab completion: `github.com/peterh/liner` (cross-platform, lightweight).
- - Ship bash completion first; add others later.
 
 ## LLM Provider
 - **LiteLLM proxy** as the initial provider.
@@ -17,10 +16,8 @@
 - Use LiteLLM's streaming (SSE/chunked) with incremental stdout rendering.
 
 ## Configuration
-- **.env** file for keys and defaults.
-- Likely lib: `github.com/joho/godotenv` (tiny), or custom loader.
-- Flags override env when provided.
-- Suggested keys (draft): `LITELLM_BASE_URL`, `LITELLM_API_KEY`, `LLM_MODEL`.
+- **.env** file for keys and defaults using `github.com/joho/godotenv`.
+- Env-only for now (no flags). Keys include: `LITELLM_BASE_URL`, `LITELLM_API_KEY`, `LLM_MODEL`, `TEMPERATURE`, `TOP_P`, `DB_PATH`, `SYSTEM_PROMPT`, `MODEL_CONTEXT_TOKENS`, `ENABLE_PROVIDER_WEBSEARCH`, `DROP_SAMPLING_PARAMS`, `DEBUG_PROMPTS`.
 
 ## Persistence / Memory
 - **SQLite** for local history.
@@ -28,7 +25,7 @@
 - Access via `database/sql` (no heavy ORM).
 
 ## Logging
-- Prefer stdlib `log/slog` for zero extra deps.
+- Using fmt/stdout-stderr for now; can migrate to `log/slog` later.
 
 ## Tools / Function Calling
 - Pass tool definitions to compatible models via LiteLLM (OpenAI-style tools).
@@ -46,7 +43,6 @@
 - `gofmt`, `go vet`; optional `golangci-lint` later.
 
 ## Token Accounting
-- Prefer provider-reported `usage` for tokens if available via LiteLLM.
-- Optional local estimation: `github.com/pkoukk/tiktoken-go` (add later if needed).
+- Local estimation based on rough chars-per-token heuristic; context percent printed when `MODEL_CONTEXT_TOKENS` is set.
 
 

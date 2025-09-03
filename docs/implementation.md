@@ -3,7 +3,7 @@
 ## Milestones
 1. Repo init and docs scaffold.
 2. Go module init; CLI skeleton; basic `chat` command.
-3. Config loader (.env + flags; precedence: flags > env > defaults).
+3. Config loader (.env via godotenv; env-only for now).
 4. Provider interface + LiteLLM adapter (streaming, models listing).
 5. Stream renderer for stdout with minimal buffering and natural formatting.
 6. Memory store: SQLite schema + CRUD via `database/sql`.
@@ -14,16 +14,19 @@
 11. Docker: multi-stage build for Linux container.
 12. Build and basic packaging; usage examples.
 
-## Commands (draft)
-- `clichat` (interactive chat; default conversation)
-- `clichat --conversation mytopic` (named thread)
-- `clichat history [--conversation id] [--limit N]`
-- `clichat clear [--conversation id]`
-- `clichat config test` (validate env/keys)
-- Slash in-session: `/model <name>` to switch and persist default model
-- Slash in-session: `/models` to list available models
+## Commands
+- `clichat chat` (interactive chat; default conversation id "default")
+- `clichat models` (list models from LiteLLM)
+- `clichat model <name>` (set default model, persisted in `state.json`)
 
-## .env (example draft)
+In-session slash commands within `chat`:
+- `/models` list models
+- `/model <name>` set default model
+- `/history` print recent messages
+- `/clear` clear messages and reset context stats
+- `/contextwindow` show prompt/answer counts and token usage
+
+## .env (example)
 ```
 # Provider
 LLM_PROVIDER=litellm
@@ -47,14 +50,17 @@ ENABLE_PROVIDER_WEBSEARCH=false
 
 # Context window (optional override)
 MODEL_CONTEXT_TOKENS=
+
+# Debug/tuning
+DROP_SAMPLING_PARAMS=false
+DEBUG_PROMPTS=false
 ```
 
 ## Model Defaulting
-- If `LLM_MODEL` is unset, on startup fetch `/models` from LiteLLM and use the first available model.
-- `/model <name>` updates the default in memory and persists to local config/state.
+- If `LLM_MODEL` is set, it is used as the default model.
+- `/model <name>` updates the default and persists it to local state (`state.json`).
 
 ## Completion
-- Generate shell completion scripts via `cobra` (bash first; zsh/fish/powershell later).
 - In-session tab completion for `/model <name>` using live results from `/models`.
 
 ## Docker
@@ -101,7 +107,6 @@ internal/
   cli/
     root.go
     chat.go            # interactive loop (liner), slash commands
-    completion.go      # shell completion (bash first)
   chat/
     service.go         # orchestrates config, memory, provider, streaming
   provider/
@@ -120,11 +125,12 @@ internal/
 ```
 
 4) Implement config loader
-- Precedence: flags > env > defaults. Keys:
+- Env-only loader with sane defaults. Keys:
   - `LLM_PROVIDER=litellm`, `LITELLM_BASE_URL`, `LITELLM_API_KEY`
   - `LLM_MODEL` (optional), `TEMPERATURE`, `TOP_P`
   - `SYSTEM_PROMPT`, `MODEL_CONTEXT_TOKENS` (optional), `DB_PATH`
   - `ENABLE_PROVIDER_WEBSEARCH` (true|false)
+  - `DROP_SAMPLING_PARAMS` (true|false), `DEBUG_PROMPTS` (true|false)
 
 5) Implement LiteLLM client
 - Endpoints: `/v1/chat/completions` (stream), `/v1/models` (list).
@@ -153,17 +159,11 @@ internal/
 - Print footer line with run stats (elapsed, tokens if provided, context %).
 
 10) Context percentage display
-- Prefer provider-reported usage to compute %: `(prompt+completion_tokens)/MODEL_CONTEXT_TOKENS`.
-- If usage/context is missing, show `N/A` (add local estimation later if desired).
+- After streaming completes, if `MODEL_CONTEXT_TOKENS` is set, print `used/total (percent)` based on local token estimates.
+- `/contextwindow` command shows saved prompt/answer counts and token usage; prints `N/A` percentage when total is not set.
 
 11) Bash completion
-- Generate bash completion with cobra and add an installation note in README.
-```
-clichat completion bash > /etc/bash_completion.d/clichat    # root
-# or
-clichat completion bash > ~/.config/clichat/completion.bash
-source ~/.config/clichat/completion.bash
-```
+- Not implemented yet for the CLI. Consider adding later.
 
 12) Docker packaging
 - Multi-stage Dockerfile producing a static Linux binary.
@@ -175,10 +175,10 @@ source ~/.config/clichat/completion.bash
 - Memory store: schema and CRUD tests.
 
 14) Acceptance checklist (MVP)
-- `clichat` runs, accepts input, streams responses.
-- `/models` lists models; `/model` switches and persists default.
-- Messages saved and restored; context % shown when available.
-- Docker image builds and runs; bash completion works.
+- `clichat chat` runs, accepts input, streams responses.
+- `models` lists models; `model` switches and persists default; in-session `/model` works.
+- Messages saved and restored; context % shown when `MODEL_CONTEXT_TOKENS` is set; `/contextwindow` works.
+- Docker image builds and runs.
 
 15) Nice-to-haves (post-MVP)
 - Zsh/fish/PowerShell completion.

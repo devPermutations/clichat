@@ -7,9 +7,9 @@
 - **Stream Renderer**: Writes tokens to stdout with minimal latency and natural formatting.
 - **Memory Store**: Persists conversations/messages locally (SQLite).
 - **Context Budgeter**: Tracks tokens used; displays % of model context consumed.
-- **Config Loader**: Reads .env and merges with flags.
+- **Config Loader**: Reads .env via godotenv; no flags yet.
 - **Tooling**: Provider-native tool pass-through only; no local tool execution in MVP.
-- **Logger**: Structured logs via slog.
+- **Logger**: Minimal stdout/stderr via fmt; slog later.
 
 ## Data Flow (MVP)
 1. User runs `clichat` and enters a message.
@@ -39,6 +39,8 @@
 - `SYSTEM_PROMPT`
 - `MODEL_CONTEXT_TOKENS` (optional override for context % computation)
 - `ENABLE_PROVIDER_WEBSEARCH=true|false`
+ - `DROP_SAMPLING_PARAMS`
+ - `DEBUG_PROMPTS`
 
 ## Observability
 - Minimal structured logs to stderr; redact secrets.
@@ -50,6 +52,9 @@
 ## Slash Commands (initial)
 - `/model <name>`: Switch and persist default model for subsequent chats.
 - `/models`: List models from LiteLLM; supports tab completion in-session.
+- `/history`: Print recent messages for the current conversation.
+- `/clear`: Clear messages and reset context stats for the current conversation.
+- `/contextwindow`: Show prompt/answer counts and token usage; percentage shown when `MODEL_CONTEXT_TOKENS` is set.
 
 ## Notes on Websearch
 - Provider-native browsing only in MVP: if exposed via LiteLLM (e.g., `web_search`), enable it at the provider/LiteLLM level; the CLI passes through `tools` and does not implement a custom tool.

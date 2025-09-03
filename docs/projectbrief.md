@@ -21,9 +21,9 @@
 - Single binary CLI.
 - LiteLLM proxy adapter as the first provider.
 - Local conversation history.
-- Simple commands: start chat, view history, clear.
-- Slash commands: `/models`, `/model <name>` with tab completion.
-- System prompt override via flag/env and in-session command.
+- Commands: `chat`, `models`, `model <name>`.
+- In-session slash commands: `/models`, `/model <name>`, `/history`, `/clear`, `/contextwindow`.
+- System prompt override via env (`SYSTEM_PROMPT`).
 
 ## Constraints
 - Primary platforms: Docker/Ubuntu and Windows.
@@ -40,12 +40,7 @@
 - Runs in a Docker container on Ubuntu.
 
 ## Open Questions (to be resolved via Q&A)
-- LiteLLM model selection and listing strategy (e.g., from /models).
-- Which CLI framework (stdlib flags vs cobra vs urfave/cli)?
-- Exact memory backend (modernc SQLite vs mattn SQLite vs file)?
-- Default system prompt and prompt customization?
-- Conversation scoping (default conversation id, limits, retention)?
-- Env naming conventions and flag overrides?
-- Enabling provider-native browsing via LiteLLM (env/flags behavior).
+- Default conversation scoping beyond `default` (naming, limits, retention).
+- Token accounting refinements and potential provider-reported usage integration.
 
 
